@@ -1,12 +1,12 @@
-CXX = ccache g++
+CXX = g++
 CXXFLAGS_EXTRA =
 
-LDFLAGS = -lGL -ldl -lpthread -lX11 /usr/local/lib/libglfw3.a
+LDFLAGS = -lGL -ldl -lpthread -lX11 -lglfw
 
 TARGET  = testbench
-CXXFLAGS = -MMD -MP -std=c++20 -Wall -O2 -Iinclude -Iinclude/imgui $(CXXFLAGS_EXTRA)
+CXXFLAGS = -MMD -MP -std=c++20 -Wall -O2 -Iinclude  $(CXXFLAGS_EXTRA)
 
-SRCS = $(wildcard *.cpp src/*.cpp src/*.c src/portaudio/*.c src/imgui/*.cpp)
+SRCS = $(wildcard *.cpp src/*.cpp src/*.c src/portaudio/*.c)
 
 # Map each source to its object under build/, preserving directory structure.
 OBJS = $(patsubst %.cpp,build/%.o,$(patsubst %.c,build/%.o,$(SRCS)))

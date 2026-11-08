@@ -130,7 +130,7 @@ float cloudDensity(vec3 p){
   float d = remap(base, detail - 1.0, 1.0, 0.0, 1.0);
   d *= heightGradient(p.y);
   d = remap(d, 0.5, 1.0, 0.0, 1.0);
-  return clamp(d, 0.0, 1.0) * 0.06;
+  return clamp(d, 0.0, 1.0) * 0.0012;
 }
 
 
@@ -138,7 +138,14 @@ float density(vec3 x){
   return 0.01;
 }
 float inScatter(vec3 x){
-  return 0.5;
+  return 1.0;
+}
+
+vec3 skyColor(vec3 rd) {
+  float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
+  vec3 horizon = vec3(0.65, 0.80, 1.00);
+  vec3 zenith = vec3(0.15, 0.35, 0.75);
+  return mix(horizon, zenith, smoothstep(0.0, 1.0, h));
 }
 void main() {
     vec2 uv = 2.0 * vUV - 1.0;
@@ -150,14 +157,17 @@ void main() {
     vec3 camY   = vec3( 0.0, 1.0, 0.0);
     vec3 camZ   = vec3( 0.0, 0.0, 1.0);
 
-    vec3 color  = vec3( 0.0, 0.0, 0.0);
-    vec3 albedo = vec3( 0.0, 0.0, 0.0);
-    vec3 background = vec3(0.0,0.0,1.0);
+
     // ray origin 
     vec3 ro = camPos;
     // ray direction, forward is pos z 
     vec3 rd = normalize(uv.x*camX + uv.y*camY + camZ);
     
+    vec3 albedo = vec3( 0.0, 0.0, 0.0);
+    vec3 background = skyColor(rd);
+    vec3 color      = background;
+    
+
     vec2 hit = rayBox(ro, rd, CLOUD_MIN, CLOUD_MAX);
     float tNear = hit.x;
     float tFar  = hit.y;

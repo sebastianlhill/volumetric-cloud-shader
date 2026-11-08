@@ -7,10 +7,6 @@
 
 #include "shader.h"
 
-// ---------------------------------------------------------------------------
-// GLFW callbacks
-// ---------------------------------------------------------------------------
-
 static void error_callback(int error, const char* description) {
     std::cerr << "glfw error " << error << " : " << description << '\n';
 }
@@ -58,9 +54,6 @@ static void key_callback(GLFWwindow* window, int key, int /*scancode*/, int acti
     }
 }
 
-// ---------------------------------------------------------------------------
-// Argument parsing
-// ---------------------------------------------------------------------------
 
 // Accepts:
 //   program                 -> shaders/fbm.frag  (default)
@@ -99,10 +92,20 @@ static std::string resolveFragPath(int argc, char** argv) {
     return "shaders/" + arg;
 }
 
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
 
+void bakeNoise(){
+  GLuint noiseTex; 
+  glGenTextures(1, &noiseTex);
+  glBindTexture(GL_TEXTURE_3D, noiseTex);
+
+  glTexImage3D(GL_TEXTURE_3D, 0, GL_R32F, 128, 128, 128, 0, GL_RED, GL_FLOAT, nullptr);
+
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+}
 int main(int argc, char** argv) {
     glfwSetErrorCallback(error_callback);
     if (!glfwInit()) return -1;
@@ -145,6 +148,9 @@ int main(int argc, char** argv) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(tri_verts), tri_verts, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    
+    // creating 3D Noise texture for clouds 
+    bakeNoise();
 
     // Resolve the fragment shader and load the program.
     ReloadState state;
@@ -189,3 +195,4 @@ int main(int argc, char** argv) {
     glfwTerminate();
     return 0;
 }
+
