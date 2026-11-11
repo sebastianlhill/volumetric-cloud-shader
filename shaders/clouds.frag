@@ -4,6 +4,8 @@ out vec4 fragColor;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform sampler3D uCloudShape; 
+uniform sampler3D uCloudErosion;
 
 #define CLOUD_MAX 4000.0
 #define CLOUD_MIN 1500.0 
@@ -124,23 +126,27 @@ float heightGradient(float y) {
 }
 
 float cloudDensity(vec3 p){
+  vec4 shape = texture(uCloudShape, p * 0.0015);
 
-  float base = perlinWorley3(p * 0.0015);
-  float detail = fbmWorley3(p * 0.01);
-  float d = remap(base, detail - 1.0, 1.0, 0.0, 1.0);
-  d *= heightGradient(p.y);
-  d = remap(d, 0.5, 1.0, 0.0, 1.0);
-  return clamp(d, 0.0, 1.0) * 0.0012;
+  float baseCloud  = shape.r;
+  float lowFreqFBM = shape.g * 0.625 + shape.b * 0.25 + shape.a * 0.125;
+
+  baseCloud = remap(baseCloud, -(1.0 - lowFreqFBM), 1.0, 0.0, 1.0);
+
+  baseCloud *= heightGradient(p.y);
+
+  vec4 erosion = texture(uCloudErosion, p *0.01);
+  float highFreqFBM = erosion.r * 0.625 + erosion.g * 0.25 + erosion.b * 0.125;
+
+  float erosionStrength = mix(1.0 - highFreqFBM, 1.0, baseCloud);
+  float finalDensity = remap(baseCloud, erosionStrength, 1.0, 0.0, 1.0);
+
+  return clamp(finalDensity, 0.0, 1.0) * 0.012;
+
 }
-
-
-float density(vec3 x){
-  return 0.01;
-}
-float inScatter(vec3 x){
+float inScatter(vec3 p){
   return 1.0;
 }
-
 vec3 skyColor(vec3 rd) {
   float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 horizon = vec3(0.65, 0.80, 1.00);
@@ -187,7 +193,7 @@ void main() {
       for (int i = 0; i < MAX_STEPS; ++i){
         t = tNear + (i + 0.5) * stepSize; 
         x = ro + t * rd;
-        sigma_t = density(x);
+        sigma_t = cloudDensity(x);
         // transmittance over this segment 
         stepTrans = exp(-sigma_t * stepSize);
         // accumulate in scattered light 

@@ -10,7 +10,9 @@ executable('shader_testbench',
   sources: [
     'src/main.cpp', 
     'src/shader.cpp',
-    'src/glad.c'
+    'src/cloudbake.cpp',
+    'src/glad.c',
+    'src/TileableVolumeNoise.cpp'
     ],
   include_directories : inc,
   dependencies : [glfw_dep, gl_dep],
