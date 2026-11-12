@@ -1,5 +1,5 @@
-A simple shader testbench, opengl 3.3, glfw, imgui
+Volumetric Cloud Shader, largely based on Sebastian Hillaires Volumetric integration approach, Reinder Nijhoff's Himalayan Shadertoy, and Andrew Schneider's work on Nubis.
 
-meson setup builddir 
-meson compile -C builddir
-./builddir/shader_testbench
+https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf
+https://www.shadertoy.com/view/MdGfzh
+https://www.schneidervfx.com/

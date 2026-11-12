@@ -8,6 +8,7 @@
 #include "shader.h"
 #include "TileableVolumeNoise.h"
 #include "cloudbake.h"
+#include "volumeio.h"
 #include <glm/vec3.hpp>
 
 static void error_callback(int error, const char* description) {
@@ -29,11 +30,10 @@ struct ReloadState {
 };
 
 struct CloudTextures {
-  GLuint shape   = 0;
-  GLuint erosion = 0;
-  bool   baked   = false;
+    GLuint shape   = 0;
+    GLuint erosion = 0;
+    bool baked     = false;
 };
-
 // Loads (or reloads) the program into `s`. On failure leaves `s` untouched.
 static bool loadProgramInto(ReloadState& s, const std::string& vert_path) {
     try {
@@ -104,11 +104,34 @@ static std::string resolveFragPath(int argc, char** argv) {
         arg += ".frag";
     return "shaders/" + arg;
 }
-void uploadVolume3D(GLuint tex, int N, const std::vector<float>& data) {
-    glBindTexture(GL_TEXTURE_3D, tex);
+
+static bool createVolumeTextureFromFile(const char* path, GLuint& outTex){
+  int N = 0, C = 0;
+  std::vector<float> data;
+
+  if (!loadVolume3D(path, N, C, data)) {
+        std::cerr << "loadVolume3D failed: " << path << '\n';
+        return false;
+    }
+std::printf("%s: N=%d C=%d floats=%zu\n", path, N, C, data.size());
+    if (C != 4) {
+        std::cerr << "Expected 4 channels, got " << C << " in " << path << '\n';
+        return false;
+    }
+    glGenTextures(1, &outTex);
+    glBindTexture(GL_TEXTURE_3D, outTex);
     glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA16F,
                  N, N, N, 0,
                  GL_RGBA, GL_FLOAT, data.data());
+    
+  GLenum err = glGetError();
+  if (err) std::fprintf(stderr, "glTexImage3D error 0x%x\n", err);
+
+  GLint tw = 0, th = 0, td = 0;
+  glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_WIDTH,  &tw);
+  glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_HEIGHT, &th);
+  glGetTexLevelParameteriv(GL_TEXTURE_3D, 0, GL_TEXTURE_DEPTH,  &td);
+  std::printf("  texture dims: %dx%dx%d\n", tw, th, td);
 
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -116,21 +139,20 @@ void uploadVolume3D(GLuint tex, int N, const std::vector<float>& data) {
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
     glGenerateMipmap(GL_TEXTURE_3D);
-}
+    glBindTexture(GL_TEXTURE_3D, 0);
 
-static void generateCloudTextures(CloudTextures& ct){
-  if (ct.baked) return;
-  std::cout << "baking cloud noise volumes\n";
-  auto shapeData   = bakeCloudShape(128);
-  auto erosionData = bakeCloudErosion(32);
+    std::printf("Loaded %s (%d^3, %d channels)\n", path, N, C);
+    
+    std::vector<float> readback(size_t(N)*N*N*4);
+glBindTexture(GL_TEXTURE_3D, outTex);
+glGetTexImage(GL_TEXTURE_3D, 0, GL_RGBA, GL_FLOAT, readback.data());
 
-  glGenTextures(1, &ct.shape);
-  glGenTextures(1, &ct.erosion);
-
-  uploadVolume3D(ct.shape, 128 , shapeData);
-  uploadVolume3D(ct.erosion, 32, erosionData);
-  ct.baked = true;
-  std::cout << "finished baking\n";
+int nonzero = 0;
+float mn = 1e9f, mx = -1e9f;
+for (float v : readback) { if (v > 0.001f) nonzero++; mn = std::min(mn,v); mx = std::max(mx,v); }
+std::printf("  readback: nonzero=%d/%zu  min=%.3f max=%.3f\n",
+            nonzero, readback.size(), mn, mx);
+    return true;
 }
 
 int main(int argc, char** argv) {
@@ -175,10 +197,12 @@ int main(int argc, char** argv) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(tri_verts), tri_verts, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    
+   
     // Resolve the fragment shader and load the program.
     ReloadState state;
-    CloudTextures cloudTex;
+    CloudTextures ct; 
+    createVolumeTextureFromFile("data/cloudshape.vol", ct.shape);
+    createVolumeTextureFromFile("data/clouderosion.vol", ct.erosion);
 
     state.frag_path = resolveFragPath(argc, argv);
     std::cout << "Loading fragment shader: " << state.frag_path << '\n';
@@ -209,16 +233,13 @@ int main(int argc, char** argv) {
         glUniform1f(state.u_time, t);
         glUniform2f(state.u_res, (float)fbw, (float)fbh);
 
-        // Only do anything if the current shader actually samples the cloud volumes.
         if (state.u_cloud_shape >= 0 && state.u_cloud_erosion >= 0) {
-            generateCloudTextures(cloudTex);
-        
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_3D, cloudTex.shape);
+            glBindTexture(GL_TEXTURE_3D, ct.shape);
             glUniform1i(state.u_cloud_shape, 0);
-        
+            
             glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_3D, cloudTex.erosion);
+            glBindTexture(GL_TEXTURE_3D, ct.erosion);
             glUniform1i(state.u_cloud_erosion, 1);
         }
     
@@ -228,10 +249,8 @@ int main(int argc, char** argv) {
         glDrawArrays(GL_TRIANGLES, 0, 3);
         glfwSwapBuffers(window);
     }
-    if (cloudTex.baked) {
-        glDeleteTextures(1, &cloudTex.shape);
-        glDeleteTextures(1, &cloudTex.erosion);
-    }
+    glDeleteTextures(1, &ct.shape);
+    glDeleteTextures(1, &ct.erosion);
     glDeleteProgram(state.program);
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &vbo);

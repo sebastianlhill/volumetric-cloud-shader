@@ -7,76 +7,17 @@ uniform float u_time;
 uniform sampler3D uCloudShape; 
 uniform sampler3D uCloudErosion;
 
-#define CLOUD_MAX 4000.0
-#define CLOUD_MIN 1500.0 
+#define CLOUD_MAX 400.0
+#define CLOUD_MIN 200.0 
 
 #define MAX_STEPS 128
 
 
 
 
-vec3 hash3(vec3 p) {
-    p = vec3(dot(p, vec3(127.1, 311.7,  74.7)),
-             dot(p, vec3(269.5, 183.3, 246.1)),
-             dot(p, vec3(113.5, 271.9, 124.6)));
-    return fract(sin(p) * 43758.5453123) * 2.0 - 1.0;
-}
-
-float perlin3(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-    vec3 u = f*f*f*(f*(f*6.0 - 15.0) + 10.0);
-
-    float n000 = dot(hash3(i + vec3(0,0,0)), f - vec3(0,0,0));
-    float n100 = dot(hash3(i + vec3(1,0,0)), f - vec3(1,0,0));
-    float n010 = dot(hash3(i + vec3(0,1,0)), f - vec3(0,1,0));
-    float n110 = dot(hash3(i + vec3(1,1,0)), f - vec3(1,1,0));
-    float n001 = dot(hash3(i + vec3(0,0,1)), f - vec3(0,0,1));
-    float n101 = dot(hash3(i + vec3(1,0,1)), f - vec3(1,0,1));
-    float n011 = dot(hash3(i + vec3(0,1,1)), f - vec3(0,1,1));
-    float n111 = dot(hash3(i + vec3(1,1,1)), f - vec3(1,1,1));
-
-    return mix(
-        mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y),
-        mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y),
-        u.z);
-}
-
-float worley3(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-    float d = 8.0;
-    for (int z = -1; z <= 1; ++z)
-    for (int y = -1; y <= 1; ++y)
-    for (int x = -1; x <= 1; ++x) {
-        vec3 g = vec3(float(x), float(y), float(z));
-        vec3 o = hash3(i + g) * 0.5 + 0.5;
-        d = min(d, length(g + o - f));
-    }
-    return d;                                          // ~[0,1]
-}
-
-float fbmPerlin3(vec3 p) {
-    float v = 0.0, amp = 0.5;
-    for (int i = 0; i < 5; ++i) { v += amp * perlin3(p); p *= 2.0; amp *= 0.5; }
-    return v;
-}
-float fbmWorley3(vec3 p) {
-    float v = 0.0, amp = 0.5;
-    for (int i = 0; i < 4; ++i) { v += amp * (1.0 - worley3(p)); p *= 2.0; amp *= 0.5; }
-    return v;
-}
-
 float remap(float x, float a, float b, float c, float d) {
     return c + (x - a) / (b - a) * (d - c);
 }
-
-float perlinWorley3(vec3 p) {
-    float pn = fbmPerlin3(p) * 0.5 + 0.5;
-    float wn = fbmWorley3(p);
-    return remap(pn, 0.0, 1.0, wn - 1.0, 1.0);
-}
-
 
 vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
@@ -127,7 +68,6 @@ float heightGradient(float y) {
 
 float cloudDensity(vec3 p){
   vec4 shape = texture(uCloudShape, p * 0.0015);
-
   float baseCloud  = shape.r;
   float lowFreqFBM = shape.g * 0.625 + shape.b * 0.25 + shape.a * 0.125;
 
@@ -138,15 +78,17 @@ float cloudDensity(vec3 p){
   vec4 erosion = texture(uCloudErosion, p *0.01);
   float highFreqFBM = erosion.r * 0.625 + erosion.g * 0.25 + erosion.b * 0.125;
 
-  float erosionStrength = mix(1.0 - highFreqFBM, 1.0, baseCloud);
+  float erosionStrength = mix(1.0 - highFreqFBM, 0.0, baseCloud);
   float finalDensity = remap(baseCloud, erosionStrength, 1.0, 0.0, 1.0);
 
   return clamp(finalDensity, 0.0, 1.0) * 0.012;
 
 }
+
 float inScatter(vec3 p){
-  return 1.0;
+  return 0.9;
 }
+
 vec3 skyColor(vec3 rd) {
   float h = clamp(rd.y * 0.5 + 0.5, 0.0, 1.0);
   vec3 horizon = vec3(0.65, 0.80, 1.00);
@@ -208,5 +150,13 @@ void main() {
 
     // Gamma correction
     color = pow(color, vec3(1.0/2.2)); // simple linear to gamma, exposure of 1.0
+
+    vec4 s = texture(uCloudShape, vec3(uv * 4.0, 0.5));
+    //fragColor = vec4(vec3(uv*4.0,0.5), 1.0);   // → Perlin-Worley only
+    // fragColor = vec4(vec3(s.g), 1.0);   // → Worley FBM 0
+    // fragColor = vec4(vec3(s.b), 1.0);   // → Worley FBM 1
+    // fragColor = vec4(vec3(s.a), 1.0);   // → Worley FBM 2
     fragColor = vec4(color, 1.0);
+    //fragColor = vec4(vec3(s.g), 1.0);   // → Worley FBM 0
+    //fragColor = vec4(vec3(s.r), 1.0);   // → Perlin-Worley only
 }
